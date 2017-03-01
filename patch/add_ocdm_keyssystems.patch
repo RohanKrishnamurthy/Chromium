@@ -1,0 +1,103 @@
+diff --git a/chrome/chrome_renderer.gypi b/chrome/chrome_renderer.gypi
+index cae6dcb..3642ff3 100644
+--- a/chrome/chrome_renderer.gypi
++++ b/chrome/chrome_renderer.gypi
+@@ -274,6 +274,7 @@
+         '../third_party/icu/icu.gyp:icui18n',
+         '../third_party/icu/icu.gyp:icuuc',
+         '../third_party/widevine/cdm/widevine_cdm.gyp:widevine_cdm_version_h',
++        '../media/media.gyp:opencdmkeysystems',
+       ],
+       'include_dirs': [
+         '..',
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+index c0a4a7f..a715a5a 100644
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -115,6 +115,8 @@
+ #include "ui/base/webui/jstemplate_builder.h"
+ #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
+ 
++#include "media/cdm/ppapi/external_open_cdm/src/browser/opencdm_key_systems.h"
++
+ #if !defined(DISABLE_NACL)
+ #include "components/nacl/common/nacl_constants.h"
+ #include "components/nacl/renderer/nacl_helper.h"
+@@ -1209,6 +1211,7 @@ bool ChromeContentRendererClient::AllowPepperMediaStreamAPI(
+ void ChromeContentRendererClient::AddSupportedKeySystems(
+     std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems) {
+   AddChromeKeySystems(key_systems);
++  AddExternalOpenCdmKeySystems(key_systems);
+ }
+ 
+ bool ChromeContentRendererClient::ShouldReportDetailedMessageForSource(
+diff --git a/media/base/key_system_names.cc b/media/base/key_system_names.cc
+index 6fdf44c..e96e9f3 100644
+--- a/media/base/key_system_names.cc
++++ b/media/base/key_system_names.cc
+@@ -7,6 +7,7 @@
+ namespace media {
+ 
+ const char kClearKey[] = "org.w3.clearkey";
++const char kPlayreadyKey[] = "com.microsoft.playready";
+ const char kExternalClearKey[] = "org.chromium.externalclearkey";
+ 
+ bool IsClearKey(const std::string& key_system) {
+
+diff --git a/media/base/key_system_names.h b/media/base/key_system_names.h
+index 0ba1934..794aa9c 100644
+--- a/media/base/key_system_names.h
++++ b/media/base/key_system_names.h
+@@ -24,6 +24,9 @@ MEDIA_EXPORT bool IsChildKeySystemOf(const std::string& key_system,
+ // Returns true if |key_system| is External Clear Key, false otherwise.
+ MEDIA_EXPORT bool IsExternalClearKey(const std::string& key_system);
+ 
++// The key system name for Playready
++MEDIA_EXPORT extern const char kPlayreadyKey[];
++
+ }  // namespace media
+ 
+ #endif  // MEDIA_BASE_KEY_SYSTEM_NAMES_H_
+ 
+diff --git a/media/base/key_systems.cc b/media/base/key_systems.cc
+index e970f0a..09fc767 100644
+--- a/media/base/key_systems.cc
++++ b/media/base/key_systems.cc
+@@ -155,6 +155,9 @@ static bool IsPotentiallySupportedKeySystem(const std::string& key_system) {
+     return true;
+   if (key_system == kClearKeyKeySystem)
+     return true;
++  // Linaro: External playready
++  if (key_system == kPlayreadyKey)
++    return true;
+ 
+   // External Clear Key is known and supports suffixes for testing.
+   if (IsExternalClearKey(key_system))
+
+diff --git a/media/media.gyp b/media/media.gyp
+index 6bfddab..40efaae 100644
+--- a/media/media.gyp
++++ b/media/media.gyp
+@@ -51,6 +51,7 @@
+   'includes': [
+     'media_cdm.gypi',
+     'media_variables.gypi',
++    './cdm/ppapi/external_open_cdm/src/browser/media_open_cdm.gypi',
+   ],
+   'targets': [
+     {
+
+diff --git a/media/cdm/ppapi/cdm_logging.cc b/media/cdm/ppapi/cdm_logging.cc
+index 5552862..7cd7001 100644
+--- a/media/cdm/ppapi/cdm_logging.cc
++++ b/media/cdm/ppapi/cdm_logging.cc
+@@ -77,7 +77,7 @@ uint64_t TickCount() {
+   return mach_absolute_time();
+ #elif defined(OS_POSIX)
+   struct timespec ts;
+-  clock_gettime(CLOCK_MONOTONIC, &ts);
++  //clock_gettime(CLOCK_MONOTONIC, &ts);
+ 
+   uint64_t absolute_micro = static_cast<int64_t>(ts.tv_sec) * 1000000 +
+                             static_cast<int64_t>(ts.tv_nsec) / 1000;
+
